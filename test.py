@@ -5,6 +5,7 @@ Class definition of YOLO_v3 style detection model on image and video
 
 import colorsys
 import os
+import time
 from timeit import default_timer as timer
 
 import numpy as np
@@ -18,9 +19,28 @@ from yolo3.utils import letterbox_image
 import os
 from keras.utils import multi_gpu_model
 
+
+dir_project = os.getcwd()  # 获取当前目录
+
+# 创建创建一个存储检测结果的dir
+result_path = './result'
+if not os.path.exists(result_path):
+    os.makedirs(result_path)
+
+# result如果之前存放的有文件，全部清除
+for i in os.listdir(result_path):
+    path_file = os.path.join(result_path, i)
+    if os.path.isfile(path_file):
+        os.remove(path_file)
+
+# 创建一个记录检测结果的文件
+txt_path = result_path + '/result.txt'
+file = open(txt_path, 'w')
+
+
 class YOLO(object):
     _defaults = {
-        "model_path": 'model_data/tiny_yolo_weights.h5',
+        "model_path": 'logs/000/trained_weights_final.h5',
         "anchors_path": 'model_data/tiny_yolo_anchors.txt',
         "classes_path": 'model_data/my_classes.txt',
         "score" : 0.3,
@@ -130,6 +150,9 @@ class YOLO(object):
                     size=np.floor(3e-2 * image.size[1] + 0.5).astype('int32'))
         thickness = (image.size[0] + image.size[1]) // 300
 
+        # # 保存框检测出的框的个数   (添加)
+        # file.write('find  ' + str(len(out_boxes)) + ' target(s) \n')
+
         for i, c in reversed(list(enumerate(out_classes))):
             predicted_class = self.class_names[c]
             box = out_boxes[i]
@@ -144,6 +167,14 @@ class YOLO(object):
             left = max(0, np.floor(left + 0.5).astype('int32'))
             bottom = min(image.size[1], np.floor(bottom + 0.5).astype('int32'))
             right = min(image.size[0], np.floor(right + 0.5).astype('int32'))
+
+            # # 写入检测位置（添加）
+            # file.write(
+            #     predicted_class + '  score: ' + str(score) + ' \nlocation: top: ' + str(top) + '、 bottom: ' + str(
+            #         bottom) + '、 left: ' + str(left) + '、 right: ' + str(right) + '\n')
+
+            file.write(predicted_class + ' ' + str(score) + ' ' + str(left) + ' ' + str(top) + ' ' + str(right) + ' ' + str(bottom) + ';')
+
             print(label, (left, top), (right, bottom))
 
             if top - label_size[1] >= 0:
@@ -161,7 +192,6 @@ class YOLO(object):
                 fill=self.colors[c])
             draw.text(text_origin, label, fill=(0, 0, 0), font=font)
             del draw
-
         end = timer()
         print(end - start)
         return image
@@ -169,12 +199,14 @@ class YOLO(object):
     def close_session(self):
         self.sess.close()
 
+
+
 def detect_video(yolo, video_path, output_path=""):
     import cv2
     vid = cv2.VideoCapture(video_path)
     if not vid.isOpened():
         raise IOError("Couldn't open webcam or video")
-    video_FourCC    = int(vid.get(cv2.CAP_PROP_FOURCC))
+    video_FourCC    = int(vid.get(cv2.CAP_PROP_FOURCC))        # 获得视频编码MPEG4/H264
     video_fps       = vid.get(cv2.CAP_PROP_FPS)
     video_size      = (int(vid.get(cv2.CAP_PROP_FRAME_WIDTH)),
                         int(vid.get(cv2.CAP_PROP_FRAME_HEIGHT)))
@@ -188,7 +220,7 @@ def detect_video(yolo, video_path, output_path=""):
     prev_time = timer()
     while True:
         return_value, frame = vid.read()
-        image = Image.fromarray(frame)
+        image = Image.fromarray(frame)           # 从array转换成image
         image = yolo.detect_image(image)
         result = np.asarray(image)
         curr_time = timer()
@@ -210,3 +242,48 @@ def detect_video(yolo, video_path, output_path=""):
             break
     yolo.close_session()
 
+
+# 批量处理文件
+if __name__ == '__main__':
+    if True:
+        # 读取test文件
+        with open("dataset/ImageSets/Main/test.txt", 'r') as f:  # 打开文件
+            test_list = f.readlines()  # 读取文件
+            test_list = [x.strip() for x in test_list if x.strip() != '']  # 去除/n
+            # print(test_list)
+
+        t1 = time.time()
+        yolo = YOLO()
+
+        for filename in test_list:
+            image_path = 'dataset/JPEGImages/'+filename+'.jpg'
+            portion = os.path.split(image_path)
+            # file.write(portion[1]+' detect_result：\n')
+            file.write(image_path + ' ')
+            image = Image.open(image_path)
+            image_mAP_save_path = dir_project + '/mAP/'
+            image.save(image_mAP_save_path + filename + '.jpg')
+            r_image = yolo.detect_image(image)
+            file.write('\n')
+            #r_image.show() 显示检测结果
+            image_save_path = './result/result_'+portion[1]
+            print('detect result save to....:'+image_save_path)
+            r_image.save(image_save_path)
+
+        time_sum = time.time() - t1
+        # file.write('time sum: '+str(time_sum)+'s')
+        print('time sum:',time_sum)
+        file.close()
+        yolo.close_session()
+
+    if False:
+        img_path = 'dataset/JPEGImages_resize'
+        result_path = 'dataset/image_result'
+        for file in os.listdir(img_path):
+            file_path = os.path.join(img_path, file)
+            image = Image.open(file_path)
+            r_image = yolo.detect_image(image)
+
+            image_save_path = os.path.join(result_path, file)
+            print('detect result save to: ' + image_save_path)
+            r_image.save(image_save_path)

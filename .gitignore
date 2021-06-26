@@ -2,7 +2,10 @@
 *.png
 *.weights
 *.h5
+dataset/
 logs/
+result/
+mAP/
 *_test.py
 
 # Byte-compiled / optimized / DLL files

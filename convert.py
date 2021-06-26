@@ -43,7 +43,7 @@ def unique_config_sections(config_file):
     """
     section_counters = defaultdict(int)
     output_stream = io.StringIO()
-    with open(config_file) as fin:
+    with open(config_file, encoding="utf-8") as fin:
         for line in fin:
             if line.startswith('['):
                 section = line.strip().strip('[]')
